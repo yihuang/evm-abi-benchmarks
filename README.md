@@ -1,10 +1,10 @@
 # evm-abi-benchmarks
 
 Cross-language benchmarks for EVM ABI encoding/decoding: the **Lean** codec
-in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to
-`main` in the lake manifest) against **go-ethereum's `abi` package** (the
-mainstream Go ABI implementation).  Same shapes, same sizes, same µs/op
-methodology.
+in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to the
+`monad-walkers` branch in the lake manifest — `main` plus a `@[csimp]`
+decoder fast path) against **go-ethereum's `abi` package** (the mainstream
+Go ABI implementation).  Same shapes, same sizes, same µs/op methodology.
 
 ```
 lean/   Bench.lean — the Lean benchmark (lake project depending on evm-abi-lean)
@@ -21,7 +21,7 @@ cd lean && lake build bench && ./.lake/build/bin/bench
 cd go && go build -o bench . && ./bench
 
 # both, then print the Lean-vs-Go table below
-./bench_diff.py
+./scripts/bench_diff.py
 ```
 
 Both print sizes; Go's sizes are Lean + 32 (its `Arguments.Pack` wraps a
@@ -30,9 +30,9 @@ otherwise identical).
 
 The comparable rows are also emitted as machine-readable
 `BENCH <key> <µs/op> <bytes>` lines (the same keys on both sides);
-`bench_diff.py` runs both binaries, joins them on the key, and regenerates
-the table below.  Pass two captured outputs as arguments instead to diff
-without re-running (`./bench_diff.py lean.txt go.txt`).
+`scripts/bench_diff.py` runs both binaries, joins them on the key, and
+regenerates the table below.  Pass two captured outputs as arguments
+instead to diff without re-running (`./scripts/bench_diff.py lean.txt go.txt`).
 
 ## Methodology
 
@@ -51,17 +51,26 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 504 | 183 | 2.8× behind |
-| encode flat 2000 | 2128 | 694 | 3.1× behind |
-| encode `uint256[]` 1000 | 513 | 94 | 5.5× behind |
-| encode nest depth 50 | 60 | 131 | 2.2× ahead |
-| encode nest depth 200 | 250 | 1678 | 6.7× ahead |
-| decode flat 500 (ValBA) | 77 | 90 | **parity** |
-| decode flat 2000 (ValBA) | 317 | 338 | **parity** |
-| encode unaligned 2000 | 797 | 629 | 1.3× behind |
-| decode unaligned 2000 (ValBA) | 357 | 335 | **parity** |
-| encode `bytes32[]` 2000 | 191 | 197 | **parity** |
-| decode `bytes32[]` 2000 (ValBA) | 185 | 171 | **parity** |
+| encode flat `bytes[]` 500 | 492 | 198 | 2.5× behind |
+| encode flat 2000 | 2103 | 752 | 2.8× behind |
+| encode `uint256[]` 1000 | 514 | 90 | 5.7× behind |
+| encode nest depth 50 | 59 | 130 | 2.2× ahead |
+| encode nest depth 200 | 243 | 1658 | 6.8× ahead |
+| decode flat 500 (ValBA) | 63 | 89 | 1.4× ahead |
+| decode flat 2000 (ValBA) | 264 | 324 | **parity** |
+| decode `uint256[]` 2000 (ValBA) | 1821 | 103 | 17.7× behind |
+| encode unaligned 2000 | 808 | 599 | 1.3× behind |
+| decode unaligned 2000 (ValBA) | 293 | 339 | **parity** |
+| encode `bytes32[]` 2000 | 194 | 191 | **parity** |
+| decode `bytes32[]` 2000 (ValBA) | 133 | 153 | **parity** |
+
+(`monad-walkers` is `main` plus one commit — `decodeBAValFast`, a
+`@[csimp]` copy of `decodeBAVal` whose array/tuple walkers are replaced by
+cursor-threaded loops.  Against the same-session `main` binary, the decode
+rows are ~20-35% faster on cheap elements — flat `bytes[]` 85→64, flat
+2000 327→257, unaligned 351→298, `bytes32[]` 207→135 µs/op — and
+unchanged on `uint256[]` (1905→1854), where each element is dominated by
+bignum word decoding.)
 
 ## What the shapes test
 
