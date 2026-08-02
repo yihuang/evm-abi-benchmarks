@@ -19,7 +19,12 @@ import (
 
 const reps = 20
 
-func timeIt(label string, act func() int) {
+// timeIt is timeItKey without the machine-readable line.
+func timeIt(label string, act func() int) { timeItKey("", label, act) }
+
+// timeItKey is timeIt plus a `BENCH <key> <us/op> <bytes>` line that
+// bench_diff.py joins against the Lean bench (same keys, same shapes).
+func timeItKey(key, label string, act func() int) {
 	t0 := time.Now()
 	checksum := 0
 	for i := 0; i < reps; i++ {
@@ -28,6 +33,9 @@ func timeIt(label string, act func() int) {
 	t1 := time.Now()
 	us := float64(t1.Sub(t0).Nanoseconds()) / 1000 / float64(reps)
 	fmt.Printf("  %s: %6.0f us/op  (%d bytes)\n", label, us, checksum/reps)
+	if key != "" {
+		fmt.Printf("BENCH %s %d %d\n", key, int(us), checksum/reps)
+	}
 }
 
 // mkBytes is the 256-byte payload used by the nested-tuple values
@@ -97,10 +105,10 @@ func nestType(k int) (abi.Type, error) {
 	return abi.NewType("tuple", "", nestComponents(k))
 }
 
-func benchTy(label string, ty abi.Type, v any) {
+func benchTy(key, label string, ty abi.Type, v any) {
 	fmt.Println(label)
 	args := abi.Arguments{{Type: ty}}
-	timeIt("go-ethereum Pack       ", func() int {
+	timeItKey(key, "go-ethereum Pack       ", func() int {
 		out, err := args.Pack(v)
 		if err != nil {
 			panic(err)
@@ -109,9 +117,9 @@ func benchTy(label string, ty abi.Type, v any) {
 	})
 }
 
-func benchDecode(label string, args abi.Arguments, data []byte) {
+func benchDecode(key, label string, args abi.Arguments, data []byte) {
 	fmt.Printf("%s (%d bytes)\n", label, len(data))
-	timeIt("go-ethereum Unpack     ", func() int {
+	timeItKey(key, "go-ethereum Unpack     ", func() int {
 		if _, err := args.Unpack(data); err != nil {
 			panic(err)
 		}
@@ -136,33 +144,33 @@ func main() {
 	bytes32Args := abi.Arguments{{Type: bytes32Ty}}
 
 	fmt.Println("== flat bytes[], 256-byte elements (constant factor) ==")
-	benchTy("-- 500 elements", flatTy, flatValOf(256, 500))
-	benchTy("-- 2000 elements", flatTy, flatValOf(256, 2000))
+	benchTy("encode/flat/500", "-- 500 elements", flatTy, flatValOf(256, 500))
+	benchTy("encode/flat/2000", "-- 2000 elements", flatTy, flatValOf(256, 2000))
 	fmt.Println("== uint256[], full-width values (bignum word encoding) ==")
-	benchTy("-- 1000 words", wideTy, wideVal(1000))
+	benchTy("encode/uint256/1000", "-- 1000 words", wideTy, wideVal(1000))
 	fmt.Println("== nested tuples (bytes, (bytes, ...)) (asymptotics) ==")
 	for _, d := range []int{50, 200} {
 		nt, err := nestType(d)
 		must(err)
-		benchTy(fmt.Sprintf("-- depth %d", d), nt, nestValFor(d))
+		benchTy(fmt.Sprintf("encode/nest/%d", d), fmt.Sprintf("-- depth %d", d), nt, nestValFor(d))
 	}
 	fmt.Println("== decode: flat bytes[] ==")
 	enc500, err := flatArgs.Pack(flatValOf(256, 500))
 	must(err)
 	enc2000, err := flatArgs.Pack(flatValOf(256, 2000))
 	must(err)
-	benchDecode("-- 500 elements", flatArgs, enc500)
-	benchDecode("-- 2000 elements", flatArgs, enc2000)
+	benchDecode("decode/flat/500", "-- 500 elements", flatArgs, enc500)
+	benchDecode("decode/flat/2000", "-- 2000 elements", flatArgs, enc2000)
 	fmt.Println("== unaligned 100-byte payloads (pad 28) ==")
 	encUnal, err := flatArgs.Pack(flatValOf(100, 2000))
 	must(err)
-	benchTy("-- 2000 elements, encode", flatTy, flatValOf(100, 2000))
-	benchDecode("-- 2000 elements, decode", flatArgs, encUnal)
+	benchTy("encode/unaligned/2000", "-- 2000 elements, encode", flatTy, flatValOf(100, 2000))
+	benchDecode("decode/unaligned/2000", "-- 2000 elements, decode", flatArgs, encUnal)
 	fmt.Println("== bytes32[]: fixed-word payloads ==")
 	encB32, err := bytes32Args.Pack(bytes32Val(2000))
 	must(err)
-	benchTy("-- 2000 elements, encode", bytes32Ty, bytes32Val(2000))
-	benchDecode("-- 2000 elements, decode", bytes32Args, encB32)
+	benchTy("encode/bytes32/2000", "-- 2000 elements, encode", bytes32Ty, bytes32Val(2000))
+	benchDecode("decode/bytes32/2000", "-- 2000 elements, decode", bytes32Args, encB32)
 
 	// size cross-check against the Lean bench (Lean sizes are Go minus the
 	// 32-byte argument-wrapper offset)

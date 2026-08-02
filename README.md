@@ -19,11 +19,20 @@ cd lean && lake build bench && ./.lake/build/bin/bench
 
 # Go
 cd go && go build -o bench . && ./bench
+
+# both, then print the Lean-vs-Go table below
+./bench_diff.py
 ```
 
 Both print sizes; Go's sizes are Lean + 32 (its `Arguments.Pack` wraps a
 single top-level dynamic argument in an offset word — the bytes are
 otherwise identical).
+
+The comparable rows are also emitted as machine-readable
+`BENCH <key> <µs/op> <bytes>` lines (the same keys on both sides);
+`bench_diff.py` runs both binaries, joins them on the key, and regenerates
+the table below.  Pass two captured outputs as arguments instead to diff
+without re-running (`./bench_diff.py lean.txt go.txt`).
 
 ## Methodology
 
@@ -42,17 +51,17 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 633 | 175 | 3.6× behind |
-| encode flat 2000 | 2577 | 702 | 3.7× behind |
-| encode `uint256[]` 1000 | 716 | 86 | 8.3× behind |
-| encode nest depth 50 | 83 | 125 | **1.5× ahead** |
-| encode nest depth 200 | 316 | 1881 | **6.0× ahead** |
-| decode flat 500 (ValBA) | 77 | 93 | **parity** |
-| decode flat 2000 (ValBA) | 319 | 369 | **parity** |
-| encode unaligned 2000 | 1230 | 587 | 2.1× behind |
-| decode unaligned 2000 (ValBA) | 362 | 358 | **parity** |
-| encode `bytes32[]` 2000 | 199 | 211 | **parity** |
-| decode `bytes32[]` 2000 (ValBA) | 199 | 183 | **parity** |
+| encode flat `bytes[]` 500 | 504 | 183 | 2.8× behind |
+| encode flat 2000 | 2128 | 694 | 3.1× behind |
+| encode `uint256[]` 1000 | 513 | 94 | 5.5× behind |
+| encode nest depth 50 | 60 | 131 | 2.2× ahead |
+| encode nest depth 200 | 250 | 1678 | 6.7× ahead |
+| decode flat 500 (ValBA) | 77 | 90 | **parity** |
+| decode flat 2000 (ValBA) | 317 | 338 | **parity** |
+| encode unaligned 2000 | 797 | 629 | 1.3× behind |
+| decode unaligned 2000 (ValBA) | 357 | 335 | **parity** |
+| encode `bytes32[]` 2000 | 191 | 197 | **parity** |
+| decode `bytes32[]` 2000 (ValBA) | 185 | 171 | **parity** |
 
 ## What the shapes test
 

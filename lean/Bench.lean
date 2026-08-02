@@ -84,18 +84,32 @@ def nestVal : (k : Nat) → (nest k).Val
 
 def reps : Nat := 20
 
-def timeIt (label : String) (act : Unit → Nat) : IO Unit := do
+def timeCore (label : String) (act : Unit → Nat) : IO (Nat × Nat) := do
   let t0 ← IO.monoNanosNow
   let mut checksum := 0
   for _ in [0:reps] do
     checksum := checksum + act ()
   let t1 ← IO.monoNanosNow
-  IO.println s!"  {label}: {(t1 - t0) / (1000 * reps)} us/op  ({checksum / reps} bytes)"
+  let us := (t1 - t0) / (1000 * reps)
+  let byteCount := checksum / reps
+  IO.println s!"  {label}: {us} us/op  ({byteCount} bytes)"
+  pure (us, byteCount)
 
-def benchTy (label : String) (t : Ty) (v : t.Val) : IO Unit := do
+/-- `timeIt` plus a machine-readable `BENCH <key> <us/op> <bytes>` line that
+`bench_diff.py` joins against the Go bench (same keys, same shapes). -/
+def timeItKey (key label : String) (act : Unit → Nat) : IO Unit := do
+  let (us, byteCount) ← timeCore label act
+  if ! key.isEmpty then
+    IO.println s!"BENCH {key} {us} {byteCount}"
+
+def timeIt (label : String) (act : Unit → Nat) : IO Unit := do
+  let _ ← timeCore label act
+  pure ()
+
+def benchTy (key label : String) (t : Ty) (v : t.Val) : IO Unit := do
   IO.println label
   timeIt "spec  Spec.encode ++ toByteArray" (fun _ => (Spec.encode t v).toByteArray.size)
-  timeIt "fast  Spec.encodeByteArray      " (fun _ => (Spec.encodeByteArray t v).size)
+  timeItKey key "fast  Spec.encodeByteArray      " (fun _ => (Spec.encodeByteArray t v).size)
 
 /-- Decode the same buffer both ways; the `bytes` count is the buffer size. -/
 def benchDecode (label : String) (ba : ByteArray) : IO Unit := do
@@ -105,7 +119,7 @@ def benchDecode (label : String) (ba : ByteArray) : IO Unit := do
   timeIt "fast  decodeStrictBA       " (fun _ =>
     if (decodeStrictBA flatTy ba).isSome then ba.size else 0)
 
-def benchValBA (payload : Nat) (p : payload < 2 ^ 256) (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
+def benchValBA (decodeKey encodeKey : String) (payload : Nat) (p : payload < 2 ^ 256) (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
   let v := flatValOf payload p n h
   let vba := flatValBAOf payload p n h
   -- Not `Spec.encodeByteArray flatTy v`: that shares the subexpression with the
@@ -115,17 +129,17 @@ def benchValBA (payload : Nat) (p : payload < 2 ^ 256) (n : Nat) (h : n < 2 ^ 25
   IO.println s!"-- {n} elements ({ba.size} bytes)"
   timeIt "decodeStrictBA (List)  " (fun _ =>
     if (decodeStrictBA flatTy ba).isSome then ba.size else 0)
-  timeIt "decodeStrict (BA)    " (fun _ =>
+  timeItKey decodeKey "decodeStrict (BA)    " (fun _ =>
     if (decodeStrict flatTy ba).isSome then ba.size else 0)
   timeIt "Spec.encodeByteArray (List) " (fun _ => (Spec.encodeByteArray flatTy v).size)
-  timeIt "encode (BA)          " (fun _ => (encode flatTy vba).size)
+  timeItKey encodeKey "encode (BA)          " (fun _ => (encode flatTy vba).size)
   IO.println s!"  agree: {(encode flatTy vba) == (Spec.encodeByteArray flatTy v)} ∧ {(decodeStrict flatTy ba).isSome == (decodeStrictBA flatTy ba).isSome}"
 
 /-- `bytesN` payloads — the fixed-word decode.  `decodeStrictBA` reads each
 payload as a ≤32-cell cons list (`windowList`) and repacks it;
 `decodeStrict` extracts the payload in one `copySlice` with the padding
 checked by index (`allZerosBA`), so this row isolates the list round-trip. -/
-def benchBytesN (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
+def benchBytesN (decodeKey encodeKey : String) (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
   let t : Ty := .array (.bytesN 32)
   let el : Ty.Val (.bytesN 32) := ⟨List.replicate 32 7, by simp⟩
   let v : t.Val := ⟨List.replicate n el, by simpa using h⟩
@@ -136,20 +150,20 @@ def benchBytesN (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
   IO.println s!"-- bytes32[] × {n} ({ba.size} bytes)"
   timeIt "decodeStrictBA (List)  " (fun _ =>
     if (decodeStrictBA t ba).isSome then ba.size else 0)
-  timeIt "decodeStrict (BA)    " (fun _ =>
+  timeItKey decodeKey "decodeStrict (BA)    " (fun _ =>
     if (decodeStrict t ba).isSome then ba.size else 0)
-  timeIt "encode (BA)          " (fun _ => (encode t vba).size)
+  timeItKey encodeKey "encode (BA)          " (fun _ => (encode t vba).size)
   IO.println s!"  agree: {(decodeStrict t ba).isSome == (decodeStrictBA t ba).isSome}"
 
 def main : IO Unit := do
   IO.println "== flat bytes[], 256-byte elements (constant factor) =="
-  benchTy "-- 500 elements"  flatTy (flatValOf 256 (by decide) 500 (by decide))
-  benchTy "-- 2000 elements" flatTy (flatValOf 256 (by decide) 2000 (by decide))
+  benchTy "encode/flat/500" "-- 500 elements"  flatTy (flatValOf 256 (by decide) 500 (by decide))
+  benchTy "encode/flat/2000" "-- 2000 elements" flatTy (flatValOf 256 (by decide) 2000 (by decide))
   IO.println "== uint256[], full-width values (bignum word encoding) =="
-  benchTy "-- 1000 words" wideTy (wideVal 1000 (by decide))
+  benchTy "encode/uint256/1000" "-- 1000 words" wideTy (wideVal 1000 (by decide))
   IO.println "== nested tuples (bytes, (bytes, ...)) (asymptotics) =="
-  benchTy "-- depth 50"  (nest 50)  (nestVal 50)
-  benchTy "-- depth 200" (nest 200) (nestVal 200)
+  benchTy "encode/nest/50" "-- depth 50"  (nest 50)  (nestVal 50)
+  benchTy "encode/nest/200" "-- depth 200" (nest 200) (nestVal 200)
   -- the two encoders must agree byte for byte — this is `encodeByteArray_eq`
   let v := flatValOf 256 (by decide) 50 (by decide)
   let w := nestVal 20
@@ -161,9 +175,9 @@ def main : IO Unit := do
   IO.println s!"agree(flat)   = {(Spec.encode flatTy v).toByteArray == Spec.encodeByteArray flatTy v}"
   IO.println s!"agree(nested) = {(Spec.encode (nest 20) w).toByteArray == Spec.encodeByteArray (nest 20) w}"
   IO.println "== ValBA vs Val: aligned 256-byte payloads (pad 0) =="
-  benchValBA 256 (by decide) 500 (by decide)
-  benchValBA 256 (by decide) 2000 (by decide)
+  benchValBA "decode/flat/500" "" 256 (by decide) 500 (by decide)
+  benchValBA "decode/flat/2000" "" 256 (by decide) 2000 (by decide)
   IO.println "== ValBA vs Val: unaligned 100-byte payloads (pad 28 — the list-free pad check) =="
-  benchValBA 100 (by decide) 2000 (by decide)
+  benchValBA "decode/unaligned/2000" "encode/unaligned/2000" 100 (by decide) 2000 (by decide)
   IO.println "== bytesN: fixed-word payloads (list round-trip vs one extract) =="
-  benchBytesN 2000 (by decide)
+  benchBytesN "decode/bytes32/2000" "encode/bytes32/2000" 2000 (by decide)
