@@ -148,6 +148,9 @@ func main() {
 	benchTy("encode/flat/2000", "-- 2000 elements", flatTy, flatValOf(256, 2000))
 	fmt.Println("== uint256[], full-width values (bignum word encoding) ==")
 	benchTy("encode/uint256/1000", "-- 1000 words", wideTy, wideVal(1000))
+	encWide2000, err := abi.Arguments{{Type: wideTy}}.Pack(wideVal(2000))
+	must(err)
+	benchDecode("decode/uint256/2000", "-- 2000 words, decode", abi.Arguments{{Type: wideTy}}, encWide2000)
 	fmt.Println("== nested tuples (bytes, (bytes, ...)) (asymptotics) ==")
 	for _, d := range []int{50, 200} {
 		nt, err := nestType(d)

@@ -73,6 +73,11 @@ def wideVal (n : Nat) (h : n < 2 ^ 256) : wideTy.Val :=
   ⟨List.replicate n ⟨0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0,
     by decide⟩, by simpa using h⟩
 
+/-- The same value, packed (`ValBA`). -/
+def wideValBA (n : Nat) (h : n < 2 ^ 256) : ValBA wideTy :=
+  ⟨List.replicate n ⟨0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0,
+    by decide⟩, by simpa using h⟩
+
 /-- `nest k = (bytes, (bytes, … ))`, `k` tuples deep. -/
 def nest : Nat → Ty
   | 0 => .tuple [.bytes]
@@ -161,6 +166,14 @@ def main : IO Unit := do
   benchTy "encode/flat/2000" "-- 2000 elements" flatTy (flatValOf 256 (by decide) 2000 (by decide))
   IO.println "== uint256[], full-width values (bignum word encoding) =="
   benchTy "encode/uint256/1000" "-- 1000 words" wideTy (wideVal 1000 (by decide))
+  -- Decode: on `main` the monadic walkers allocate a closure per element; the
+  -- `monad-walkers` branch routes this through the `@[csimp]` fast path
+  -- (`decodeBAValFast`).  Full-width words make each element expensive (~1 µs
+  -- of bignum decoding), so the closure overhead is small relative to the work.
+  let wba := encode wideTy (wideValBA 2000 (by decide))
+  IO.println s!"-- 2000 words, decode ({wba.size} bytes)"
+  timeItKey "decode/uint256/2000" "decodeStrict (BA)    " (fun _ =>
+    if (decodeStrict wideTy wba).isSome then wba.size else 0)
   IO.println "== nested tuples (bytes, (bytes, ...)) (asymptotics) =="
   benchTy "encode/nest/50" "-- depth 50"  (nest 50)  (nestVal 50)
   benchTy "encode/nest/200" "-- depth 200" (nest 200) (nestVal 200)

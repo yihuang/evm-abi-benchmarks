@@ -30,6 +30,7 @@ ROWS = [
     ("encode/nest/200", "encode nest depth 200"),
     ("decode/flat/500", "decode flat 500 (ValBA)"),
     ("decode/flat/2000", "decode flat 2000 (ValBA)"),
+    ("decode/uint256/2000", "decode `uint256[]` 2000 (ValBA)"),
     ("encode/unaligned/2000", "encode unaligned 2000"),
     ("decode/unaligned/2000", "decode unaligned 2000 (ValBA)"),
     ("encode/bytes32/2000", "encode `bytes32[]` 2000"),
