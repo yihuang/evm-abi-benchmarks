@@ -1,0 +1,11 @@
+name = "evm-abi-benchmarks"
+defaultTargets = ["bench"]
+
+[[lean_exe]]
+name = "bench"
+root = "Bench"
+
+[[require]]
+name = "abi-lean"
+git = "https://github.com/yihuang/evm-abi-lean.git"
+rev = "main"
