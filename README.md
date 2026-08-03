@@ -1,10 +1,10 @@
 # evm-abi-benchmarks
 
 Cross-language benchmarks for EVM ABI encoding/decoding: the **Lean** codec
-in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to the
-`monad-walkers` branch in the lake manifest — `main` plus a `@[csimp]`
-decoder fast path) against **go-ethereum's `abi` package** (the mainstream
-Go ABI implementation).  Same shapes, same sizes, same µs/op methodology.
+in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to
+`main` in the lake manifest, rev `601e7ea`) against **go-ethereum's
+`abi` package** (the mainstream Go ABI implementation).  Same shapes, same
+sizes, same µs/op methodology.
 
 ```
 lean/   Bench.lean — the Lean benchmark (lake project depending on evm-abi-lean)
@@ -51,26 +51,29 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 492 | 198 | 2.5× behind |
-| encode flat 2000 | 2103 | 752 | 2.8× behind |
-| encode `uint256[]` 1000 | 514 | 90 | 5.7× behind |
-| encode nest depth 50 | 59 | 130 | 2.2× ahead |
-| encode nest depth 200 | 243 | 1658 | 6.8× ahead |
-| decode flat 500 (ValBA) | 63 | 89 | 1.4× ahead |
-| decode flat 2000 (ValBA) | 264 | 324 | **parity** |
-| decode `uint256[]` 2000 (ValBA) | 1821 | 103 | 17.7× behind |
-| encode unaligned 2000 | 808 | 599 | 1.3× behind |
-| decode unaligned 2000 (ValBA) | 293 | 339 | **parity** |
-| encode `bytes32[]` 2000 | 194 | 191 | **parity** |
-| decode `bytes32[]` 2000 (ValBA) | 133 | 153 | **parity** |
+| encode flat `bytes[]` 500 | 458 | 195 | 2.3× behind |
+| encode flat 2000 | 1852 | 645 | 2.9× behind |
+| encode `uint256[]` 1000 | 525 | 85 | 6.2× behind |
+| encode nest depth 50 | 53 | 120 | 2.3× ahead |
+| encode nest depth 200 | 209 | 1776 | 8.5× ahead |
+| decode flat 500 (ValBA) | 80 | 97 | **parity** |
+| decode flat 2000 (ValBA) | 318 | 357 | **parity** |
+| decode `uint256[]` 2000 (ValBA) | 1945 | 107 | 18.2× behind |
+| encode unaligned 2000 | 412 | 699 | 1.7× ahead |
+| decode unaligned 2000 (ValBA) | 362 | 318 | **parity** |
+| encode `bytes32[]` 2000 | 209 | 215 | **parity** |
+| decode `bytes32[]` 2000 (ValBA) | 204 | 176 | **parity** |
 
-(`monad-walkers` is `main` plus one commit — `decodeBAValFast`, a
-`@[csimp]` copy of `decodeBAVal` whose array/tuple walkers are replaced by
-cursor-threaded loops.  Against the same-session `main` binary, the decode
-rows are ~20-35% faster on cheap elements — flat `bytes[]` 85→64, flat
-2000 327→257, unaligned 351→298, `bytes32[]` 207→135 µs/op — and
-unchanged on `uint256[]` (1905→1854), where each element is dominated by
-bignum word decoding.)
+(`601e7ea` is `main` with the copy-based writer from #35: `@[csimp]`
+`emitZeros_eq_fast` copies zero runs out of a static buffer and
+`word32Small` computes only the non-zero `UInt64` of a small word — so the
+encode rows moved: flat `bytes[]` 492→458 / 2103→1852, nest 243→209, and
+unaligned 808→412 µs/op, now 1.7× *ahead* of go-ethereum where it was
+1.3× behind.  The decode rows are back to the monadic-walker baselines:
+the `@[csimp]` `decodeBAValFast` lives on `monad-walkers` (35f0333),
+which is not merged — flat 63→80, flat 2000 264→318, unaligned 293→362,
+`bytes32[]` 133→204 µs/op.  `uint256[]` decode stays ~18× behind,
+dominated by `Nat` bignum work.)
 
 ## What the shapes test
 
