@@ -2,7 +2,7 @@
 
 Cross-language benchmarks for EVM ABI encoding/decoding: the **Lean** codec
 in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to
-rev `f5864627` in the lake manifest) against **go-ethereum's
+rev `b5eb012` in the lake manifest) against **go-ethereum's
 `abi` package** (the mainstream Go ABI implementation).  Same shapes, same
 sizes, same µs/op methodology.
 
@@ -69,7 +69,7 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 Two changes since the previous table, and they are worth separating.
 
-`f5864627` makes an ABI word four `UInt64` limbs rather than a `Nat`
+`b5eb012` makes an ABI word four `UInt64` limbs rather than a `Nat`
 (yihuang/lean-binary#5 underneath it): `ValBA (.uint m)` carries a `UInt256`,
 so encoding and decoding one no longer builds a GMP integer.  That is the
 `uint256[]` rows — encode 525→147, decode 1945→195 µs/op, taking them from
