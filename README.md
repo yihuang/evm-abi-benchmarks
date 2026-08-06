@@ -2,9 +2,9 @@
 
 Cross-language benchmarks for EVM ABI encoding/decoding: the **Lean** codec
 in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to
-main(`b5eb012`) in the lake manifest) against **go-ethereum's
-`abi` package** (the mainstream Go ABI implementation).  Same shapes, same
-sizes, same µs/op methodology.
+`4222e07`, the head of its #39 branch, in the lake manifest) against
+**go-ethereum's `abi` package** (the mainstream Go ABI implementation).
+Same shapes, same sizes, same µs/op methodology.
 
 ```
 lean/   Bench.lean — the Lean benchmark (lake project depending on evm-abi-lean)
@@ -54,32 +54,45 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 83 | 167 | 2.0× ahead |
-| encode flat 2000 | 360 | 559 | 1.6× ahead |
-| encode `uint256[]` 1000 | 147 | 78 | 1.9× behind |
-| encode nest depth 50 | 13 | 98 | 7.5× ahead |
-| encode nest depth 200 | 56 | 1152 | 20.6× ahead |
-| decode flat 500 (ValBA) | 70 | 67 | **parity** |
-| decode flat 2000 (ValBA) | 297 | 264 | **parity** |
-| decode `uint256[]` 2000 (ValBA) | 195 | 83 | 2.3× behind |
-| encode unaligned 2000 | 358 | 473 | 1.3× ahead |
-| decode unaligned 2000 (ValBA) | 320 | 284 | **parity** |
-| encode `bytes32[]` 2000 | 187 | 160 | **parity** |
-| decode `bytes32[]` 2000 (ValBA) | 173 | 142 | **parity** |
+| encode flat `bytes[]` 500 | 85 | 160 | 1.9× ahead |
+| encode flat 2000 | 364 | 618 | 1.7× ahead |
+| encode `uint256[]` 1000 | 156 | 73 | 2.1× behind |
+| encode nest depth 50 | 14 | 100 | 7.1× ahead |
+| encode nest depth 200 | 58 | 1255 | 21.6× ahead |
+| decode flat 500 (ValBA) | 59 | 71 | **parity** |
+| decode flat 2000 (ValBA) | 234 | 278 | **parity** |
+| decode `uint256[]` 2000 (ValBA) | 177 | 76 | 2.3× behind |
+| encode unaligned 2000 | 359 | 459 | 1.3× ahead |
+| decode unaligned 2000 (ValBA) | 264 | 301 | **parity** |
+| encode `bytes32[]` 2000 | 183 | 173 | **parity** |
+| decode `bytes32[]` 2000 (ValBA) | 174 | 147 | **parity** |
 
-Two changes since the previous table, and they are worth separating.
+The decode rows moved; the encode rows did not. evm-abi-lean#39 caps dynamic
+payload lengths at `2^64`, and spends that cap twice: a length or offset word
+reads as four `UInt64` limbs rather than accumulating 32 bytes into a `Nat`,
+and those reads take their in-bounds proof as an argument, so the bytes come
+out through `ba[i]` with no bounds test and no panic branch. Decode flat 2000
+goes 283 → 260 → 234 µs/op across the two steps, unaligned 313 → 291 → 264 —
+both now on the faster side of parity with go-ethereum. The second step was
+worth more than the first.
+
+`bytes32[]` reads one length word for a whole array and holds at ~175
+throughout: that control is what makes the rest signal. The cap alone measures
+as nothing, and so do the encode rows and the whole go-ethereum column —
+nothing on either reads a length word, so their drift between sessions is not
+a result.
 
 `b5eb012` makes an ABI word four `UInt64` limbs rather than a `Nat`
 (yihuang/lean-binary#5 underneath it): `ValBA (.uint m)` carries a `UInt256`,
 so encoding and decoding one no longer builds a GMP integer.  That is the
-`uint256[]` rows — encode 525→147, decode 1945→195 µs/op, taking them from
-6.2× and 18.2× behind go-ethereum to 1.9× and 2.3×.
+`uint256[]` rows — encode 525→156, decode 1945→177 µs/op, taking them from
+6.2× and 18.2× behind go-ethereum to 2.1× and 2.3×.
 
 The other rows moved because *this repo* was measuring the wrong encoder.
 `benchTy` keyed `Spec.encodeByteArray` over `Ty.Val` — the specification, whose
 payloads are `List UInt8` — while every decode row keyed `decodeStrict` over
 `ValBA`.  Keying the runtime encoder instead is worth 5× on flat `bytes[]`
-with no library change at all, and turns "2.3× behind" there into 2.0× ahead.
+with no library change at all, and turns "2.3× behind" there into 1.9× ahead.
 Nothing about the library changed; the benchmark had been comparing a Go
 encoder against a Lean specification.
 

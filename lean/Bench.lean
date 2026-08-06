@@ -3,15 +3,21 @@ import EvmAbi
 /-!
 # Bench
 
-A benchmark for the executable codec — `Spec.encodeByteArray` and
-`decodeStrictBA` — against the `List UInt8` specification each is proved
-equal to.  Build and run with
+A benchmark for evm-abi-lean's runtime codec — `encode` and `decodeStrict`
+over `ValBA`, packed `ByteArray` payloads throughout — against go-ethereum's
+`abi` package on the same shapes.  Build and run with
 
 ```bash
 lake build bench && ./.lake/build/bin/bench
 ```
 
-Two shapes are measured, because they fail differently:
+The `List UInt8` specification (`Spec.encode`, `Spec.encodeByteArray`,
+`Spec.decodeStrict`) is printed alongside each row for scale, but only the
+runtime codec is keyed into the cross-language table: timing the
+specification against a Go encoder compares a Go encoder with a Lean
+*specification*, which is what the keys were fixed to stop doing.
+
+The shapes are chosen because they fail differently:
 
 * **flat `bytes[]`** — both encoders are linear here, so this measures the
   constant factor: the specification builds the whole buffer as a
@@ -41,27 +47,27 @@ open EvmAbi.Ty
 def flatTy : Ty := .array .bytes
 
 /-- A `bytes` value of `payload` bytes, packed (`ValBA` family). -/
-def mkBytesBAOf (payload : Nat) (p : payload < 2 ^ 256) : {bs : ByteArray // bs.size < 2 ^ 256} :=
+def mkBytesBAOf (payload : Nat) (p : payload < 2 ^ 64) : {bs : ByteArray // bs.size < 2 ^ 64} :=
   ⟨(List.replicate payload 7).toByteArray, by
     simp [Binary.ByteArray.size_eq_toList_length, List.length_replicate]
     exact p⟩
 
 /-- A flat `bytes[]` of `payload`-byte packed payloads. -/
-def flatValBAOf (payload : Nat) (p : payload < 2 ^ 256)
-    (n : Nat) (h : n < 2 ^ 256) : {vs : List (ValBA .bytes) // vs.length < 2 ^ 256} :=
+def flatValBAOf (payload : Nat) (p : payload < 2 ^ 64)
+    (n : Nat) (h : n < 2 ^ 64) : {vs : List (ValBA .bytes) // vs.length < 2 ^ 64} :=
   ⟨List.replicate n (mkBytesBAOf payload p), by simpa using h⟩
 
 /-- A `bytes` value of `payload` bytes. -/
-def mkBytesOf (payload : Nat) (p : payload < 2 ^ 256) : Ty.Val .bytes :=
+def mkBytesOf (payload : Nat) (p : payload < 2 ^ 64) : Ty.Val .bytes :=
   ⟨List.replicate payload 7, by simpa using p⟩
 
 /-- A flat `bytes[]` of `payload`-byte elements. -/
-def flatValOf (payload : Nat) (p : payload < 2 ^ 256)
-    (n : Nat) (h : n < 2 ^ 256) : flatTy.Val :=
+def flatValOf (payload : Nat) (p : payload < 2 ^ 64)
+    (n : Nat) (h : n < 2 ^ 64) : flatTy.Val :=
   ⟨List.replicate n (mkBytesOf payload p), by simpa using h⟩
 
 /-- A `bytes` value of `n` bytes. -/
-def mkBytes (n : Nat) (h : n < 2 ^ 256) : Ty.Val .bytes :=
+def mkBytes (n : Nat) (h : n < 2 ^ 64) : Ty.Val .bytes :=
   ⟨List.replicate n 7, by simpa using h⟩
 
 /-- A `uint256[]` of full-width values — token amounts, hashes and addresses
@@ -69,12 +75,12 @@ are all above `2 ^ 63`, so every word goes through `Nat`'s bignum path.  This
 is the case `Binary.Fast`'s chunked encoder exists for. -/
 def wideTy : Ty := .array (.uint 256)
 
-def wideVal (n : Nat) (h : n < 2 ^ 256) : wideTy.Val :=
+def wideVal (n : Nat) (h : n < 2 ^ 64) : wideTy.Val :=
   ⟨List.replicate n ⟨0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0,
     by decide⟩, by simpa using h⟩
 
 /-- The same value, packed (`ValBA`). -/
-def wideValBA (n : Nat) (h : n < 2 ^ 256) : ValBA wideTy :=
+def wideValBA (n : Nat) (h : n < 2 ^ 64) : ValBA wideTy :=
   ⟨List.replicate n ⟨0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0,
     by decide⟩, by simpa using h⟩
 
@@ -130,7 +136,7 @@ def benchDecode (label : String) (ba : ByteArray) : IO Unit := do
   timeIt "fast  decodeStrictBA       " (fun _ =>
     if (decodeStrictBA flatTy ba).isSome then ba.size else 0)
 
-def benchValBA (decodeKey encodeKey : String) (payload : Nat) (p : payload < 2 ^ 256) (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
+def benchValBA (decodeKey encodeKey : String) (payload : Nat) (p : payload < 2 ^ 64) (n : Nat) (h : n < 2 ^ 64) : IO Unit := do
   let v := flatValOf payload p n h
   let vba := flatValBAOf payload p n h
   -- Not `Spec.encodeByteArray flatTy v`: that shares the subexpression with the
@@ -150,7 +156,7 @@ def benchValBA (decodeKey encodeKey : String) (payload : Nat) (p : payload < 2 ^
 payload as a ≤32-cell cons list (`windowList`) and repacks it;
 `decodeStrict` extracts the payload in one `copySlice` with the padding
 checked by index (`allZerosBA`), so this row isolates the list round-trip. -/
-def benchBytesN (decodeKey encodeKey : String) (n : Nat) (h : n < 2 ^ 256) : IO Unit := do
+def benchBytesN (decodeKey encodeKey : String) (n : Nat) (h : n < 2 ^ 64) : IO Unit := do
   let t : Ty := .array (.bytesN 32)
   let el : Ty.Val (.bytesN 32) := ⟨List.replicate 32 7, by simp⟩
   let v : t.Val := ⟨List.replicate n el, by simpa using h⟩
