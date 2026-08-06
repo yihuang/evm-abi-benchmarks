@@ -8,7 +8,7 @@
    "rev": "b5eb012b7fcd2eadb3798bfea6712b9513da5b3d",
    "name": "«abi-lean»",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "b5eb012b7fcd2eadb3798bfea6712b9513da5b3d",
+   "inputRev": "main",
    "inherited": false,
    "configFile": "lakefile.toml"},
   {"url": "https://github.com/yihuang/lean-binary.git",
