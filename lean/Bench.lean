@@ -87,6 +87,11 @@ def nestVal : (k : Nat) → (nest k).Val
   | 0 => (mkBytes 256 (by decide), ())
   | k + 1 => (mkBytes 256 (by decide), nestVal k, ())
 
+/-- The same value, packed (`ValBA`). -/
+def nestValBA : (k : Nat) → ValBA (nest k)
+  | 0 => (mkBytesBAOf 256 (by decide), ())
+  | k + 1 => (mkBytesBAOf 256 (by decide), nestValBA k, ())
+
 def reps : Nat := 20
 
 def timeCore (label : String) (act : Unit → Nat) : IO (Nat × Nat) := do
@@ -111,10 +116,11 @@ def timeIt (label : String) (act : Unit → Nat) : IO Unit := do
   let _ ← timeCore label act
   pure ()
 
-def benchTy (key label : String) (t : Ty) (v : t.Val) : IO Unit := do
+def benchTy (key label : String) (t : Ty) (v : t.Val) (vba : ValBA t) : IO Unit := do
   IO.println label
   timeIt "spec  Spec.encode ++ toByteArray" (fun _ => (Spec.encode t v).toByteArray.size)
-  timeItKey key "fast  Spec.encodeByteArray      " (fun _ => (Spec.encodeByteArray t v).size)
+  timeIt "      Spec.encodeByteArray      " (fun _ => (Spec.encodeByteArray t v).size)
+  timeItKey key "fast  encode (ValBA)            " (fun _ => (encode t vba).size)
 
 /-- Decode the same buffer both ways; the `bytes` count is the buffer size. -/
 def benchDecode (label : String) (ba : ByteArray) : IO Unit := do
@@ -163,9 +169,12 @@ def benchBytesN (decodeKey encodeKey : String) (n : Nat) (h : n < 2 ^ 256) : IO 
 def main : IO Unit := do
   IO.println "== flat bytes[], 256-byte elements (constant factor) =="
   benchTy "encode/flat/500" "-- 500 elements"  flatTy (flatValOf 256 (by decide) 500 (by decide))
+    (flatValBAOf 256 (by decide) 500 (by decide))
   benchTy "encode/flat/2000" "-- 2000 elements" flatTy (flatValOf 256 (by decide) 2000 (by decide))
+    (flatValBAOf 256 (by decide) 2000 (by decide))
   IO.println "== uint256[], full-width values (bignum word encoding) =="
   benchTy "encode/uint256/1000" "-- 1000 words" wideTy (wideVal 1000 (by decide))
+    (wideValBA 1000 (by decide))
   -- Decode: on `main` the monadic walkers allocate a closure per element; the
   -- `monad-walkers` branch routes this through the `@[csimp]` fast path
   -- (`decodeBAValFast`).  Full-width words make each element expensive (~1 µs
@@ -175,8 +184,8 @@ def main : IO Unit := do
   timeItKey "decode/uint256/2000" "decodeStrict (BA)    " (fun _ =>
     if (decodeStrict wideTy wba).isSome then wba.size else 0)
   IO.println "== nested tuples (bytes, (bytes, ...)) (asymptotics) =="
-  benchTy "encode/nest/50" "-- depth 50"  (nest 50)  (nestVal 50)
-  benchTy "encode/nest/200" "-- depth 200" (nest 200) (nestVal 200)
+  benchTy "encode/nest/50" "-- depth 50"  (nest 50)  (nestVal 50) (nestValBA 50)
+  benchTy "encode/nest/200" "-- depth 200" (nest 200) (nestVal 200) (nestValBA 200)
   -- the two encoders must agree byte for byte — this is `encodeByteArray_eq`
   let v := flatValOf 256 (by decide) 50 (by decide)
   let w := nestVal 20
