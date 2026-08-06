@@ -2,7 +2,7 @@
 
 Cross-language benchmarks for EVM ABI encoding/decoding: the **Lean** codec
 in [`evm-abi-lean`](https://github.com/yihuang/evm-abi-lean) (pinned to
-rev `b5eb012` in the lake manifest) against **go-ethereum's
+main(`b5eb012`) in the lake manifest) against **go-ethereum's
 `abi` package** (the mainstream Go ABI implementation).  Same shapes, same
 sizes, same µs/op methodology.
 
