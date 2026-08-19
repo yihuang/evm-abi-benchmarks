@@ -43,6 +43,11 @@ so the builder only pays off in compiled code.
 
 open EvmAbi
 open EvmAbi.Ty
+-- the runtime codec (`encode`, `decodeStrict`) and the list-valued walker
+-- (`decodeStrictBA`) live in their own namespaces since evm-abi-lean#42;
+-- `Spec.*` stays reachable through `EvmAbi`.
+open EvmAbi.Codec
+open EvmAbi.Codec.ByteArray
 
 def flatTy : Ty := .array .bytes
 
