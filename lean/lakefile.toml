@@ -8,4 +8,4 @@ root = "Bench"
 [[require]]
 name = "abi-lean"
 git = "https://github.com/yihuang/evm-abi-lean.git"
-rev = "30049c03391de96d14dae7d31416878a2c8cda24"
+rev = "word-leaf"
