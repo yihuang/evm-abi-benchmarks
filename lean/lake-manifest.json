@@ -5,7 +5,7 @@
    "type": "git",
    "subDir": null,
    "scope": "",
-   "rev": "726a9873ac59c98105e045e8459f249082d53351",
+   "rev": "8776c9843a7eb9228620eb7169a53dc1b3711809",
    "name": "«abi-lean»",
    "manifestFile": "lake-manifest.json",
    "inputRev": "main",

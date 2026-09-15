@@ -11,8 +11,9 @@ lean/   Bench.lean — the Lean benchmark (lake project depending on evm-abi-lea
 go/     main.go   — the go-ethereum mirror (go-ethereum v1.13.14)
 ```
 
-Cross-language rows only.  evm-abi-lean's own bench is where the codec is
-measured against the specification it is proved equal to.
+Cross-language rows only.  evm-abi-lean measures itself: `Bench` against the
+specification it is proved equal to, and `BenchRegress` — one keyed row per
+encoder arm — against the merge base in its own CI.
 
 ## Run
 
@@ -47,13 +48,18 @@ transitively; run `lake update` to move to the branch tips.
   columns equally.  `./scripts/bench_diff.py --runs 50` does all of it in
   about nine seconds and prints the table and the spread, so the numbers and
   the claims about them come out of one command.
-* Run-to-run spread, `(max−min)/median` per row: Lean **9–38%** (median row
-  18%), go-ethereum **15–94%** (median row 28%), Go noisier on ten of the
-  twelve rows.  That is a *range* statistic, so it grows with the run count
-  and only compares between runs of equal N.  The medians are much steadier
-  than that, but the four decode rows all sit near the 1.25× band and their
-  verdict word turns on the Go column, so read them as parity-ish rather than
-  as a number.
+* Run-to-run spread, `(max−min)/median` per row: Lean **7–27%** (median row
+  16%), go-ethereum **11–71%** (median row 26%).  That is a *range*
+  statistic, so it grows with the run count, only compares between runs of
+  equal N, and is set by the single worst sample in 50 — which makes its
+  upper end a property of the machine that afternoon rather than of the row.
+  Consecutive 50-run passes put the outlier in a different column each time,
+  and re-measuring the row it landed on gave 20%; the medians agreed to
+  within one µs/op on every row across passes.  Read the spread as "how often
+  does a run get descheduled", not as an error bar on the table.
+* The four decode rows all sit near the 1.25× parity band and their verdict
+  word turns on the Go column, so read them as parity-ish rather than as a
+  number.
 * The Lean rows are the `ValBA` runtime family — `encode` and `decodeStrict`
   over packed `ByteArray` payloads — not the `List UInt8` specification the
   proofs are stated over.  The specification is not timed here: that ladder is
@@ -68,27 +74,33 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 19 | 152 | 8.0× ahead |
-| encode flat 2000 | 78 | 608 | 7.8× ahead |
-| encode `uint256[]` 1000 | 15 | 72 | 4.8× ahead |
-| encode nest depth 50 | 8 | 105 | 13.1× ahead |
-| encode nest depth 200 | 32 | 1224 | 38.2× ahead |
+| encode flat `bytes[]` 500 | 19 | 149 | 7.8× ahead |
+| encode flat 2000 | 77 | 607 | 7.9× ahead |
+| encode `uint256[]` 1000 | 15 | 74 | 4.9× ahead |
+| encode nest depth 50 | 8 | 104 | 13.0× ahead |
+| encode nest depth 200 | 32 | 1227 | 38.3× ahead |
 | decode flat 500 (ValBA) | 58 | 68 | **parity** |
-| decode flat 2000 (ValBA) | 227 | 278 | **parity** |
-| decode `uint256[]` 2000 (ValBA) | 70 | 82 | **parity** |
-| encode unaligned 2000 | 87 | 460 | 5.3× ahead |
-| decode unaligned 2000 (ValBA) | 260 | 284 | **parity** |
+| decode flat 2000 (ValBA) | 225 | 279 | **parity** |
+| decode `uint256[]` 2000 (ValBA) | 70 | 81 | **parity** |
+| encode unaligned 2000 | 86 | 456 | 5.3× ahead |
+| decode unaligned 2000 (ValBA) | 257 | 283 | **parity** |
 | encode `bytes32[]` 2000 | 11 | 172 | 15.6× ahead |
-| decode `bytes32[]` 2000 (ValBA) | 169 | 148 | **parity** |
+| decode `bytes32[]` 2000 (ValBA) | 167 | 147 | **parity** |
 
-Taken against evm-abi-lean 726a987.  Two encode rows moved twice: #45 put the
-width and arity constraints into `Ty` and cost them **17 → 20** µs/op
-(`uint256[] 1000`) and **15 → 18** (`bytes32[] 2000`), because a static-element
-array re-matched on its element type per element; #46 gave those two element
-types their own loops, with no `Ty` to scrutinise, and took them to **15** and
-**11** — past where they started.  `nest 200` keeps #45's **28 → 32**, since a
-tuple's components are heterogeneous and there is no single loop to hoist the
-match into.
+Taken against evm-abi-lean 8776c98.  Every Lean cell is within a few µs/op of
+the same table at f8f7a10 and at 726a987: neither the `grind` migration (#48)
+nor the `address` fix (#54) moves a row here.  #54 is 148× on `address[]`
+encode and 12× on its decode, and no row in this table touches `address` —
+evm-abi-lean's `BenchRegress` is where that one shows up.
+
+Before that, two encode rows moved twice: #45 put the width and arity
+constraints into `Ty` and cost them **17 → 20** µs/op (`uint256[] 1000`) and
+**15 → 18** (`bytes32[] 2000`), because a static-element array re-matched on
+its element type per element; #46 gave those two element types their own
+loops, with no `Ty` to scrutinise, and took them to **15** and **11** — past
+where they started.  `nest 200` keeps #45's **28 → 32**, since a tuple's
+components are heterogeneous and there is no single loop to hoist the match
+into.
 
 Encoding is **a size pass and a write pass**, and no intermediate structure
 at all.  The first pass computes every dynamic subvalue's encoded size
