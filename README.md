@@ -49,16 +49,14 @@ transitively; run `lake update` to move to the branch tips.
   about nine seconds and prints the table and the spread, so the numbers and
   the claims about them come out of one command.
 * Run-to-run spread, `(max−min)/median` per row: Lean **7–27%** (median row
-  14%), go-ethereum **11–104%** (median row 26%).  That is a *range*
+  16%), go-ethereum **11–71%** (median row 26%).  That is a *range*
   statistic, so it grows with the run count, only compares between runs of
   equal N, and is set by the single worst sample in 50 — which makes its
   upper end a property of the machine that afternoon rather than of the row.
-  Two consecutive 50-run passes put the outlier in different places: the
-  first read `encode unaligned 2000` at 160% on the Lean side, the second
-  `decode flat 2000` at 104% on the Go side, and re-measuring the first row
-  on its own gave 20%.  The medians, by contrast, agreed to within one µs/op
-  on every row across both passes.  Read the spread as "how often does a run
-  get descheduled", not as an error bar on the table.
+  Consecutive 50-run passes put the outlier in a different column each time,
+  and re-measuring the row it landed on gave 20%; the medians agreed to
+  within one µs/op on every row across passes.  Read the spread as "how often
+  does a run get descheduled", not as an error bar on the table.
 * The four decode rows all sit near the 1.25× parity band and their verdict
   word turns on the Go column, so read them as parity-ish rather than as a
   number.
@@ -76,25 +74,24 @@ Absolute µs are machine-specific; the ratios are the robust claim.
 
 | shape | Lean fast/ValBA | go-ethereum | Lean vs Go |
 |---|---|---|---|
-| encode flat `bytes[]` 500 | 20 | 149 | 7.5× ahead |
-| encode flat 2000 | 81 | 599 | 7.4× ahead |
-| encode `uint256[]` 1000 | 15 | 73 | 4.9× ahead |
-| encode nest depth 50 | 8 | 105 | 13.1× ahead |
-| encode nest depth 200 | 32 | 1207 | 37.7× ahead |
-| decode flat 500 (ValBA) | 58 | 69 | **parity** |
-| decode flat 2000 (ValBA) | 227 | 279 | **parity** |
-| decode `uint256[]` 2000 (ValBA) | 70 | 83 | **parity** |
-| encode unaligned 2000 | 88 | 449 | 5.1× ahead |
-| decode unaligned 2000 (ValBA) | 260 | 283 | **parity** |
-| encode `bytes32[]` 2000 | 11 | 171 | 15.5× ahead |
-| decode `bytes32[]` 2000 (ValBA) | 169 | 147 | **parity** |
+| encode flat `bytes[]` 500 | 19 | 149 | 7.8× ahead |
+| encode flat 2000 | 77 | 607 | 7.9× ahead |
+| encode `uint256[]` 1000 | 15 | 74 | 4.9× ahead |
+| encode nest depth 50 | 8 | 104 | 13.0× ahead |
+| encode nest depth 200 | 32 | 1227 | 38.3× ahead |
+| decode flat 500 (ValBA) | 58 | 68 | **parity** |
+| decode flat 2000 (ValBA) | 225 | 279 | **parity** |
+| decode `uint256[]` 2000 (ValBA) | 70 | 81 | **parity** |
+| encode unaligned 2000 | 86 | 456 | 5.3× ahead |
+| decode unaligned 2000 (ValBA) | 257 | 283 | **parity** |
+| encode `bytes32[]` 2000 | 11 | 172 | 15.6× ahead |
+| decode `bytes32[]` 2000 (ValBA) | 167 | 147 | **parity** |
 
-Taken against evm-abi-lean f8f7a10.  Every Lean cell is within one µs/op of
-the same table at 726a987, so **the `grind` migration (#48) moved nothing
-measurable**, though it did change the generated C for `Codec/Stream` and
-`Codec/ByteArray`: the added declarations are the `*_match__N_splitter`
-helpers the tactic framework emits, plus reordered forward declarations,
-none of them on a codec call path.
+Taken against evm-abi-lean 8776c98.  Every Lean cell is within a few µs/op of
+the same table at f8f7a10 and at 726a987: neither the `grind` migration (#48)
+nor the `address` fix (#54) moves a row here.  #54 is 148× on `address[]`
+encode and 12× on its decode, and no row in this table touches `address` —
+evm-abi-lean's `BenchRegress` is where that one shows up.
 
 Before that, two encode rows moved twice: #45 put the width and arity
 constraints into `Ty` and cost them **17 → 20** µs/op (`uint256[] 1000`) and
